@@ -9,6 +9,8 @@ import re
 from datetime import date
 from zoneinfo import ZoneInfo
 
+from progress import MUSCLES, default_muscle
+
 UNITS = ("kg", "lb")
 EXERCISE_UNITS = ("reps", "seconds")
 
@@ -151,6 +153,7 @@ def validate_program(p):
                 "name": name,
                 "sets": _int(ex.get("sets"), 1, 10, f"Sets for {name}"),
                 "unit": ex.get("unit") if ex.get("unit") in EXERCISE_UNITS else "reps",
+                "muscle": ex.get("muscle") if ex.get("muscle") in MUSCLES else default_muscle(name),
             })
         clean_workouts[letter] = clean
 

@@ -5,10 +5,11 @@ Hosted:       Streamlit Community Cloud, with secrets pointing at a Google Sheet
 """
 import hmac
 import os
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -23,6 +24,20 @@ from logic import (
     validate_food,
     validate_program,
     validate_set,
+)
+from progress import (
+    MUSCLES,
+    SETS_MAX,
+    SETS_MIN,
+    build_context,
+    default_muscle,
+    exercise_history,
+    is_stalled,
+    new_prs_since,
+    nutrition_averages,
+    recommendations,
+    weekly_sets_by_muscle,
+    weekly_sets_history,
 )
 from store import LocalStore, open_sheets_store, uses_sheets
 
@@ -283,7 +298,11 @@ def page_program(store, program):
 
     for letter, exercises in list(program["workouts"].items()):
         with st.expander(f"Workout {letter} · {len(exercises)} exercises"):
-            df = pd.DataFrame(exercises, columns=["name", "sets", "unit"])
+            df = pd.DataFrame(
+                [{"name": ex["name"], "sets": ex["sets"], "unit": ex.get("unit", "reps"),
+                  "muscle": ex.get("muscle") or default_muscle(ex["name"])} for ex in exercises],
+                columns=["name", "sets", "unit", "muscle"],
+            )
             edited = st.data_editor(
                 df,
                 key=f"ed-{letter}",
@@ -293,6 +312,7 @@ def page_program(store, program):
                     "name": st.column_config.TextColumn("Exercise", required=True, max_chars=60),
                     "sets": st.column_config.NumberColumn("Sets", min_value=1, max_value=10, step=1, required=True),
                     "unit": st.column_config.SelectboxColumn("Unit", options=list(EXERCISE_UNITS), required=True),
+                    "muscle": st.column_config.SelectboxColumn("Main muscle", options=MUSCLES, required=True),
                 },
             )
             c1, c2 = st.columns(2)
@@ -306,6 +326,7 @@ def page_program(store, program):
                         "name": name,
                         "sets": 3 if pd.isna(r["sets"]) else int(r["sets"]),
                         "unit": r["unit"] if r["unit"] in EXERCISE_UNITS else "reps",
+                        "muscle": r["muscle"] if r["muscle"] in MUSCLES else default_muscle(name),
                     })
                 fresh = store.get_program()
                 fresh["workouts"][letter] = rows
@@ -399,6 +420,150 @@ def page_history(store, program):
                       on_click=cb_delete_session, args=(store, s["id"]))
 
 
+# ---------- Progress page ----------
+
+def _chart_title(text):
+    return alt.Title(text, anchor="start", fontSize=13)
+
+
+def page_progress(store, program):
+    weeks = st.radio("Look back", [4, 8, 12], index=1, horizontal=True,
+                     format_func=lambda w: f"{w} weeks", key="prog_weeks")
+    ref = today_date(program)
+    cutoff = ref - timedelta(days=7 * weeks)
+    unit = program["units"]
+    timed = timed_names(program)
+
+    sessions = store.list_sessions()
+    done = [s for s in sessions if s["status"] == "done"]
+    window = [s for s in done if date.fromisoformat(s["date"]) >= cutoff]
+    window_ids = {s["id"] for s in window}
+    sets = store.list_sets()
+    food = store.list_food()
+
+    window_sets = [x for x in sets if x["session_id"] in window_ids]
+    lifts = [x for x in window_sets if x["exercise"].strip().lower() not in timed]
+    volume = sum(x["weight"] * x["reps"] for x in lifts)
+    nut = nutrition_averages(food, ref, 7 * weeks)
+    target_sessions = program["workoutsPerWeek"] * weeks
+
+    all_names = sorted({ex["name"] for exs in program["workouts"].values() for ex in exs}, key=str.lower)
+    prs = sum(
+        len(new_prs_since(exercise_history(done, sets, n, timed=n.strip().lower() in timed), cutoff))
+        for n in all_names
+    )
+
+    st.subheader("Summary")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Workouts", f"{len(window)} / {target_sessions}")
+    c2.metric("Hard sets", f"{len(window_sets)}")
+    c3.metric("New bests (estimated 1RM)", f"{prs}")
+    c4, c5 = st.columns(2)
+    c4.metric("Volume load", f"{volume:,.0f} {unit}")
+    c5.metric("Avg protein", f"{nut['protein_g']:.0f} g" if nut else "No data",
+              help=f"Target {program['nutrition']['dailyProteinTargetG']} g/day, averaged over days with food logged")
+
+    # ----- per exercise -----
+    st.subheader("Exercise progress")
+    if not all_names:
+        st.info("Add exercises on the Program tab first.")
+    else:
+        ex_name = st.selectbox("Exercise", all_names, key="prog_ex")
+        is_timed = ex_name.strip().lower() in timed
+        hist_all = exercise_history(done, sets, ex_name, timed=is_timed)
+        hist = [h for h in hist_all if date.fromisoformat(h["date"]) >= cutoff]
+        if not hist:
+            st.info("No finished sessions with this exercise in the selected window.")
+        else:
+            first, last = hist[0]["best"], hist[-1]["best"]
+            change = (last - first) / first * 100 if first else 0.0
+            best = max(h["best"] for h in hist)
+            m_label = "Best hold (s)" if is_timed else f"Best est. 1RM ({unit})"
+            c1, c2, c3 = st.columns(3)
+            c1.metric(m_label, f"{best:g}")
+            c2.metric("Change in window", f"{change:+.1f}%")
+            c3.metric("Sessions", f"{len(hist)}")
+            if is_stalled(hist_all):
+                st.warning("No new best in the last 3 sessions. See recommendations below.")
+
+            df = pd.DataFrame(hist)
+            df["date"] = pd.to_datetime(df["date"])
+            y_title = "Hold (s)" if is_timed else f"Estimated 1RM ({unit})"
+            line = (
+                alt.Chart(df, title=_chart_title(f"{ex_name}: {y_title} by session"))
+                .mark_line(point=True)
+                .encode(
+                    x=alt.X("date:T", title=None),
+                    y=alt.Y("best:Q", title=y_title, scale=alt.Scale(zero=False)),
+                    tooltip=[alt.Tooltip("date:T", title="Date"), alt.Tooltip("best:Q", title=y_title),
+                             alt.Tooltip("top_weight:Q", title=f"Top weight ({unit})"),
+                             alt.Tooltip("top_reps:Q", title="Top reps"), alt.Tooltip("sets:Q", title="Sets")],
+                )
+            )
+            st.altair_chart(line)
+
+            if not is_timed:
+                vol = (
+                    alt.Chart(df, title=_chart_title(f"{ex_name}: volume load per session"))
+                    .mark_bar()
+                    .encode(
+                        x=alt.X("date:T", title=None),
+                        y=alt.Y("volume:Q", title=f"Weight × reps ({unit})"),
+                        tooltip=[alt.Tooltip("date:T", title="Date"), alt.Tooltip("volume:Q", title="Volume"),
+                                 alt.Tooltip("sets:Q", title="Sets")],
+                    )
+                )
+                st.altair_chart(vol)
+
+    # ----- muscle volume -----
+    st.subheader("Hard sets per muscle")
+    counts = weekly_sets_by_muscle(done, sets, program, ref)
+    cdf = pd.DataFrame([{"muscle": m, "sets": n} for m, n in counts.items() if n or m != "Other"])
+    if not cdf.empty:
+        bars = alt.Chart(cdf, title=_chart_title(f"Last 7 days (target band {SETS_MIN}–{SETS_MAX})")).mark_bar().encode(
+            x=alt.X("muscle:N", sort=None, title=None),
+            y=alt.Y("sets:Q", title="Hard sets"),
+            tooltip=["muscle:N", "sets:Q"],
+        )
+        band = alt.Chart(pd.DataFrame({"y": [SETS_MIN, SETS_MAX]})).mark_rule(strokeDash=[4, 4]).encode(y="y:Q")
+        st.altair_chart(bars + band)
+
+    trend = pd.DataFrame(weekly_sets_history(done, sets, program, ref, weeks=weeks))
+    if not trend.empty:
+        trend["week_ending"] = pd.to_datetime(trend["week_ending"])
+        tl = alt.Chart(trend, title=_chart_title("Hard sets per muscle, week by week")).mark_line(point=True).encode(
+            x=alt.X("week_ending:T", title=None),
+            y=alt.Y("sets:Q", title="Hard sets"),
+            color=alt.Color("muscle:N", title=None),
+            tooltip=["muscle:N", "sets:Q", alt.Tooltip("week_ending:T", title="Week ending")],
+        )
+        st.altair_chart(tl)
+
+    # ----- recommendations -----
+    st.subheader("Recommendations")
+    ctx = build_context(sessions, sets, food, program, ref)
+    icons = {"action": st.warning, "tip": st.info, "good": st.success}
+    for level, text in recommendations(ctx):
+        icons[level](text)
+
+    with st.expander("Hypertrophy basics"):
+        st.markdown(
+            f"""
+- **Weekly volume:** aim for about **{SETS_MIN}–{SETS_MAX} hard sets per muscle per week**, spread over 2–3 sessions.
+- **Effort:** most working sets should end about **1–3 reps short of failure**.
+- **Rep ranges:** muscle grows across a wide range (roughly 6–30 reps) when sets are close to failure. Heavier work for strength, moderate work for volume.
+- **Progressive overload:** add reps, then load, over time. Log every set so the trend is real.
+- **Rest:** 2–3 minutes between heavy compound sets.
+- **Protein:** about **1.6 g per kg of bodyweight per day**, spread over 3–4 meals.
+- **Energy:** a small surplus (about 200–300 kcal/day) supports gain. Large surpluses mostly add fat.
+- **Sleep:** 7–9 hours. Recovery happens here.
+- **Deloads:** when lifts stall for 2–3 weeks, or every 6–8 weeks, take a lighter week.
+
+*General fitness information, not medical advice. If you have an injury or condition, check with a clinician or a qualified coach.*
+"""
+        )
+
+
 # ---------- app ----------
 
 require_password()
@@ -410,7 +575,7 @@ st.sidebar.caption(f"Storage: {store.kind}")
 if store.kind == "local file":
     st.sidebar.caption("Local file storage is fine on your PC. A hosted app needs Google Sheets secrets (see README), or data can be lost on restart.")
 
-page = st.radio("Section", ["Workout", "Program", "Food", "History"],
+page = st.radio("Section", ["Workout", "Program", "Food", "History", "Progress"],
                 horizontal=True, label_visibility="collapsed", key="page")
 
 if page == "Workout":
@@ -419,5 +584,7 @@ elif page == "Program":
     page_program(store, program)
 elif page == "Food":
     page_food(store, program)
-else:
+elif page == "History":
     page_history(store, program)
+else:
+    page_progress(store, program)

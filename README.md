@@ -79,6 +79,17 @@ Open the **Program** tab, Settings, and set **Timezone** (for example `America/T
   workouts (A, B, C, and so on) at the bottom of the page.
 - **Food:** Log calories, protein, and carbs per day. Today's totals sit at the top.
 - **History:** Review sessions and delete mistakes.
+- **Progress:** Pick 4, 8, or 12 weeks. You get the summary numbers (workouts, hard sets, volume,
+  new bests, average protein), a per-exercise chart of estimated 1RM and volume, weekly hard sets
+  per muscle against the 10–20 band, and recommendations. Recommendations cover missed sessions,
+  low or high weekly volume, stalled lifts (with a deload suggestion), protein and calorie intake,
+  and what's working. A "Hypertrophy basics" section sums up the guidance.
+
+Progress uses the **Main muscle** column on the Program tab. Set it per exercise so weekly volume
+is counted correctly. The app fills in common exercises for you.
+
+Estimated 1RM uses the Epley formula (`weight × (1 + reps / 30)`). It's a trend measure, not a
+tested max. Progress and recommendations are general fitness information, not medical advice.
 
 ## How progression works
 
@@ -92,6 +103,7 @@ The suggestion uses your last *finished* session only.
 |---|---|
 | `app.py` | The Streamlit UI (four sections) |
 | `logic.py` | Progression, rotation, totals, validation. No UI or storage. |
+| `progress.py` | Progress metrics (e1RM, stalls, weekly sets per muscle) and recommendation rules |
 | `store.py` | Storage: `LocalStore` (JSON file) or `SheetsStore` (Google Sheet) |
 | `default_program.json` | Starting A/B/C program, used until you edit it in the app |
 | `tests/` | Unit tests, a fake-Sheets test, and UI flow tests |

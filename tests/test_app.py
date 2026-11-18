@@ -56,6 +56,27 @@ class GymAppFlow(unittest.TestCase):
         self.assertIsNone(self.store.active_session())
         self.assertEqual(self.store.list_sessions()[0]["status"], "done")
 
+    def test_progress_page_renders_with_history(self):
+        from datetime import date, timedelta
+
+        today = date.today()
+        for i, w in enumerate([60, 62.5, 62.5, 65]):
+            day = (today - timedelta(days=7 * (3 - i))).isoformat()
+            s = self.store.add_session(day, "A", status="done")
+            for reps in (8, 8, 7):
+                self.store.add_set(s["id"], "Back Squat", w, reps)
+        self.store.add_food(today.isoformat(), "Chicken", 500, 45.0, 40.0)
+
+        at = self.run_app()
+        at.radio(key="page").set_value("Progress").run()
+        self.assertFalse(at.exception, [e.value for e in at.exception])
+        self.assertTrue(any("Recommendations" in m.value for m in at.subheader))
+
+    def test_program_page_renders(self):
+        at = self.run_app()
+        at.radio(key="page").set_value("Program").run()
+        self.assertFalse(at.exception, [e.value for e in at.exception])
+
     def test_food_entry_appears_and_saves(self):
         at = self.run_app()
         at.radio(key="page").set_value("Food").run()
