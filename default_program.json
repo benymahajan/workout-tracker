@@ -1,0 +1,38 @@
+{
+  "units": "kg",
+  "timezone": "UTC",
+  "schedule": "3x per week, full body, rotate A → B → C",
+  "workoutsPerWeek": 3,
+  "progression": {
+    "repMin": 8,
+    "repMax": 12,
+    "increment": 2.5
+  },
+  "nutrition": {
+    "dailyCalorieTarget": 2200,
+    "dailyProteinTargetG": 150
+  },
+  "workouts": {
+    "A": [
+      { "name": "Back Squat", "sets": 3, "unit": "reps" },
+      { "name": "Bench Press", "sets": 3, "unit": "reps" },
+      { "name": "Seated Cable Row", "sets": 3, "unit": "reps" },
+      { "name": "Lying Leg Curl", "sets": 2, "unit": "reps" },
+      { "name": "Plank", "sets": 3, "unit": "seconds" }
+    ],
+    "B": [
+      { "name": "Romanian Deadlift", "sets": 3, "unit": "reps" },
+      { "name": "Overhead Press", "sets": 3, "unit": "reps" },
+      { "name": "Lat Pulldown", "sets": 3, "unit": "reps" },
+      { "name": "Leg Press", "sets": 2, "unit": "reps" },
+      { "name": "Dumbbell Curl", "sets": 2, "unit": "reps" }
+    ],
+    "C": [
+      { "name": "Front Squat", "sets": 3, "unit": "reps" },
+      { "name": "Incline Dumbbell Press", "sets": 3, "unit": "reps" },
+      { "name": "Chest-Supported Row", "sets": 3, "unit": "reps" },
+      { "name": "Hip Thrust", "sets": 2, "unit": "reps" },
+      { "name": "Lateral Raise", "sets": 2, "unit": "reps" }
+    ]
+  }
+}
