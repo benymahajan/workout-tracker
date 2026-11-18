@@ -85,6 +85,11 @@ Open the **Program** tab, Settings, and set **Timezone** (for example `America/T
   low or high weekly volume, stalled lifts (with a deload suggestion), protein and calorie intake,
   and what's working. A "Hypertrophy basics" section sums up the guidance.
 
+- **Bodyweight:** log a weigh-in on the Progress tab a few times a week. The app fits a trend line
+  and reports change per week as a percent of bodyweight. Recommendations use that trend: about
+  0.1–0.5%/week is the lean-gain range. Faster gain means more fat, and flat weight with intake
+  below target means eat more.
+
 Progress uses the **Main muscle** column on the Program tab. Set it per exercise so weekly volume
 is counted correctly. The app fills in common exercises for you.
 

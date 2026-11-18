@@ -178,9 +178,45 @@ def nutrition_averages(food, ref, days=7):
     }
 
 
+# ---------- bodyweight ----------
+
+def bodyweight_trend(entries, ref, days=28):
+    """Least-squares trend of bodyweight over the last `days` days.
+
+    Returns None without at least 3 entries spanning 10+ days. Otherwise a dict with the
+    latest weight, the change per week in weight units and as a percent of bodyweight.
+    Daily weigh-ins are noisy, so the trend is what matters, not any single day.
+    """
+    pts = sorted(
+        (date.fromisoformat(e["date"]), float(e["weight"]))
+        for e in entries
+        if 0 <= (ref - date.fromisoformat(e["date"])).days < days
+    )
+    if len(pts) < 3:
+        return None
+    t0 = pts[0][0]
+    xs = [(d - t0).days for d, _ in pts]
+    ys = [w for _, w in pts]
+    span = xs[-1] - xs[0]
+    if span < 10:
+        return None
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    denom = sum((x - mx) ** 2 for x in xs)
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denom  # weight per day
+    mean_w = my
+    return {
+        "latest": ys[-1],
+        "per_week": round(slope * 7, 2),
+        "pct_per_week": round(slope * 7 / mean_w * 100, 2),
+        "points": n,
+        "span_days": span,
+    }
+
+
 # ---------- recommendations ----------
 
-def build_context(sessions, sets, food, program, ref):
+def build_context(sessions, sets, food, program, ref, bodyweight=()):
     done = [s for s in sessions if s["status"] == "done"]
     timed = timed_names(program)
     names = sorted({ex["name"] for exs in program["workouts"].values() for ex in exs}, key=str.lower)
@@ -206,6 +242,7 @@ def build_context(sessions, sets, food, program, ref):
         "avg_protein": nut["protein_g"] if nut else None,
         "kcal_target": program["nutrition"]["dailyCalorieTarget"],
         "protein_target": program["nutrition"]["dailyProteinTargetG"],
+        "bodyweight": bodyweight_trend(bodyweight, ref),
     }
 
 
@@ -260,6 +297,26 @@ def recommendations(ctx):
         elif ak > 1.15 * kt:
             out.append(("tip", f"Intake averages {ak:.0f} kcal/day, over target. That helps building muscle, "
                                f"but keep the surplus modest to limit fat gain."))
+
+    bw = ctx.get("bodyweight")
+    if bw is None:
+        out.append(("tip", "Log your bodyweight a few times a week (same time, after the bathroom). "
+                           "The trend shows whether your calories are right for building muscle."))
+    else:
+        r = bw["pct_per_week"]
+        if r > 0.5:
+            out.append(("tip", f"Bodyweight rising {r:+.2f}%/week. Above about 0.5%/week, much of the gain "
+                               f"is fat. Trim intake by about 150 kcal/day."))
+        elif r >= 0.1:
+            out.append(("good", f"Bodyweight rising {r:+.2f}%/week, in the lean-gain range "
+                                f"(about 0.1–0.5%/week)."))
+        elif ak is not None and ak < kt:
+            out.append(("action", f"Bodyweight flat or falling ({r:+.2f}%/week) while intake averages below "
+                                  f"target. If you're aiming to build muscle, add about 200–300 kcal/day "
+                                  f"and recheck in 2–3 weeks."))
+        else:
+            out.append(("tip", f"Bodyweight flat or falling ({r:+.2f}%/week). If you're aiming to build muscle, "
+                               f"add about 150–250 kcal/day and recheck in 2–3 weeks. Ignore this if you're cutting on purpose."))
 
     if not any(level == "action" for level, _ in out):
         out.append(("good", "Nothing urgent. Keep the basics steady: consistent sessions, progressive overload, "

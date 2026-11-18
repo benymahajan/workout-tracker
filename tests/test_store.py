@@ -38,6 +38,13 @@ class LocalStoreRoundTrip(unittest.TestCase):
         self.assertEqual(self.store.list_sessions(), [])
         self.assertEqual(self.store.list_sets(), [])
 
+    def test_bodyweight_add_list_delete(self):
+        a = self.store.add_bodyweight("2026-11-18", 80.5)
+        self.store.add_bodyweight("2026-11-16", 81.0)
+        self.assertEqual([b["date"] for b in self.store.list_bodyweight()], ["2026-11-16", "2026-11-18"])
+        self.assertTrue(self.store.delete_bodyweight(a["id"]))
+        self.assertEqual(len(self.store.list_bodyweight()), 1)
+
     def test_food_by_day(self):
         self.store.add_food("2026-11-18", "Oats", 400, 15, 60)
         self.store.add_food("2026-11-17", "Eggs", 150, 12, 1)

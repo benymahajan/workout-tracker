@@ -25,6 +25,7 @@ SCHEMA = {
              "reps": "int", "logged_at": "str"},
     "food": {"id": "int", "date": "str", "name": "str", "kcal": "float",
              "protein_g": "float", "carbs_g": "float"},
+    "bodyweight": {"id": "int", "date": "str", "weight": "float", "logged_at": "str"},
 }
 
 
@@ -115,6 +116,15 @@ class Store:
     def delete_food(self, id_):
         return self.delete("food", id_)
 
+    def list_bodyweight(self):
+        return sorted(self.all("bodyweight"), key=lambda b: (b["date"], b["id"]))
+
+    def add_bodyweight(self, date, weight):
+        return self.insert("bodyweight", {"date": date, "weight": weight, "logged_at": now_iso()})
+
+    def delete_bodyweight(self, id_):
+        return self.delete("bodyweight", id_)
+
 
 # ---------- local JSON file ----------
 
@@ -125,9 +135,11 @@ class LocalStore(Store):
         self.path = Path(path)
 
     def _load(self):
-        if not self.path.exists():
-            return {"program": None, "sessions": [], "sets": [], "food": []}
-        return json.loads(self.path.read_text(encoding="utf-8"))
+        data = (json.loads(self.path.read_text(encoding="utf-8"))
+                if self.path.exists() else {"program": None})
+        for table in SCHEMA:  # files made before a table existed get it empty
+            data.setdefault(table, [])
+        return data
 
     def _save(self, data):
         self.path.parent.mkdir(parents=True, exist_ok=True)

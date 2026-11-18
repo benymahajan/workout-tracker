@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from progress import (  # noqa: E402
+    bodyweight_trend,
     build_context,
     default_muscle,
     e1rm,
@@ -129,6 +130,39 @@ class Nutrition(unittest.TestCase):
         self.assertEqual(n["kcal"], 2350)  # (2300 on 11-18 + 2400 on 11-16) / 2 days
         self.assertEqual(n["protein_g"], 155)
         self.assertIsNone(nutrition_averages([], REF, 7))
+
+
+class Bodyweight(unittest.TestCase):
+    def test_trend_per_week(self):
+        # 0.5 kg a week over 3 weeks, from 80 kg
+        entries = [{"date": (date(2026, 10, 28) + __import__("datetime").timedelta(days=d)).isoformat(),
+                    "weight": 80 + 0.5 * d / 7} for d in range(0, 22, 3)]
+        t = bodyweight_trend(entries, REF, days=28)
+        self.assertAlmostEqual(t["per_week"], 0.5, places=1)
+        self.assertGreater(t["pct_per_week"], 0)
+
+    def test_needs_enough_points_and_span(self):
+        self.assertIsNone(bodyweight_trend([{"date": "2026-11-18", "weight": 80}], REF))
+        same_week = [{"date": f"2026-11-1{d}", "weight": 80 + d * 0.01} for d in range(1, 4)]
+        self.assertIsNone(bodyweight_trend(same_week, REF))
+
+    def test_rules_use_trend(self):
+        def ctx(pct, avg_kcal=2100):
+            return {
+                "sessions_this_week": 3, "sessions_target": 3, "weekly_sets": {"Quads": 12},
+                "stalled": [], "improving": [], "avg_kcal": avg_kcal, "kcal_target": 2200,
+                "avg_protein": 160, "protein_target": 150,
+                "bodyweight": {"pct_per_week": pct, "per_week": 0, "latest": 80, "points": 4, "span_days": 14},
+            }
+
+        def text_of(recs):
+            return " ".join(t for _, t in recs)
+
+        self.assertIn("lean-gain range", text_of(recommendations(ctx(0.3))))
+        self.assertIn("Trim intake", text_of(recommendations(ctx(0.8))))
+        flat_low = recommendations(ctx(0.0, avg_kcal=1900))
+        self.assertTrue(any(lvl == "action" and "200–300" in t for lvl, t in flat_low))
+        self.assertIn("Log your bodyweight", text_of(recommendations({**ctx(0), "bodyweight": None})))
 
 
 class Recommendations(unittest.TestCase):

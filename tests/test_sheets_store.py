@@ -77,7 +77,7 @@ class SheetsStoreTests(unittest.TestCase):
 
     def test_creates_tabs_with_headers(self):
         titles = [ws.title for ws in self.store.sheet.tabs]
-        self.assertEqual(sorted(titles), ["food", "program", "sessions", "sets"])
+        self.assertEqual(sorted(titles), ["bodyweight", "food", "program", "sessions", "sets"])
         self.assertEqual(self.store._tabs["sets"].grid[0][0], "id")
 
     def test_program_defaults_then_round_trips(self):

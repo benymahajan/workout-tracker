@@ -66,6 +66,8 @@ class GymAppFlow(unittest.TestCase):
             for reps in (8, 8, 7):
                 self.store.add_set(s["id"], "Back Squat", w, reps)
         self.store.add_food(today.isoformat(), "Chicken", 500, 45.0, 40.0)
+        for d, w in [(21, 79.6), (14, 79.9), (7, 80.1), (0, 80.4)]:
+            self.store.add_bodyweight((today - timedelta(days=d)).isoformat(), w)
 
         at = self.run_app()
         at.radio(key="page").set_value("Progress").run()

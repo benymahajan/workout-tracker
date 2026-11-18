@@ -29,6 +29,7 @@ from progress import (
     MUSCLES,
     SETS_MAX,
     SETS_MIN,
+    bodyweight_trend,
     build_context,
     default_muscle,
     exercise_history,
@@ -539,9 +540,46 @@ def page_progress(store, program):
         )
         st.altair_chart(tl)
 
+    # ----- bodyweight -----
+    st.subheader("Bodyweight")
+    bodyweight = store.list_bodyweight()
+    with st.form("add-bw", clear_on_submit=False):
+        c1, c2 = st.columns(2)
+        bw_day = c1.date_input("Date", value=ref, key="bw_day")
+        last_w = float(bodyweight[-1]["weight"]) if bodyweight else 70.0
+        bw_weight = c2.number_input(f"Weight ({unit})", min_value=20.0, max_value=1000.0,
+                                    value=last_w, step=0.1, key="bw_weight")
+        if st.form_submit_button("Log weight"):
+            store.add_bodyweight(bw_day.isoformat(), float(bw_weight))
+            st.rerun()
+
+    bw_window = [b for b in bodyweight if date.fromisoformat(b["date"]) >= cutoff]
+    trend = bodyweight_trend(bodyweight, ref, days=7 * weeks)
+    if not bw_window:
+        st.caption("No weigh-ins in this window yet.")
+    else:
+        bdf = pd.DataFrame(bw_window)
+        bdf["date"] = pd.to_datetime(bdf["date"])
+        bw_chart = alt.Chart(bdf, title=_chart_title(f"Bodyweight ({unit})")).mark_circle(size=60).encode(
+            x=alt.X("date:T", title=None),
+            y=alt.Y("weight:Q", title=unit, scale=alt.Scale(zero=False)),
+            tooltip=[alt.Tooltip("date:T", title="Date"), alt.Tooltip("weight:Q", title=unit)],
+        )
+        if len(bdf) >= 2:
+            bw_chart = bw_chart + alt.Chart(bdf).transform_regression(
+                "date", "weight", method="linear").mark_line(color="#6b7280", strokeDash=[4, 4]).encode(
+                x="date:T", y="weight:Q")
+        st.altair_chart(bw_chart)
+    if trend:
+        c1, c2 = st.columns(2)
+        c1.metric("Trend per week", f"{trend['pct_per_week']:+.2f}%", f"{trend['per_week']:+.2f} {unit}")
+        c2.metric("Latest", f"{trend['latest']:.1f} {unit}")
+    else:
+        st.caption("Log at least 3 weigh-ins spread over 10+ days to see a trend.")
+
     # ----- recommendations -----
     st.subheader("Recommendations")
-    ctx = build_context(sessions, sets, food, program, ref)
+    ctx = build_context(sessions, sets, food, program, ref, bodyweight=bodyweight)
     icons = {"action": st.warning, "tip": st.info, "good": st.success}
     for level, text in recommendations(ctx):
         icons[level](text)
