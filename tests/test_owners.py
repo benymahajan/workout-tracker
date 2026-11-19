@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from identity import resolve_user  # noqa: E402
+from identity import check_login, resolve_user  # noqa: E402
 from store import LocalStore  # noqa: E402
 
 ANA, BEN = "ana@example.com", "ben@example.com"
@@ -88,6 +88,24 @@ class LegacyData(unittest.TestCase):
         owner = LocalStore(self.path, legacy_owner=ANA).with_owner(ANA)
         self.assertEqual(owner.get_program()["units"], "lb")
         self.assertEqual(LocalStore(self.path, legacy_owner=ANA).with_owner(BEN).get_program()["units"], "kg")
+
+
+class PasscodeLogin(unittest.TestCase):
+    USERS = {"Ben": "beta-pass", "ana": "alpha-pass"}
+
+    def test_right_name_and_passcode(self):
+        self.assertEqual(check_login("Ana", "alpha-pass", self.USERS), "ana")
+        self.assertEqual(check_login("  BEN ", "beta-pass", self.USERS), "ben")
+
+    def test_wrong_passcode_or_name_is_refused_with_same_message(self):
+        for name, code in [("ana", "wrong"), ("nobody", "alpha-pass"), ("", "alpha-pass")]:
+            with self.assertRaises(PermissionError) as cm:
+                check_login(name, code, self.USERS)
+            self.assertEqual(str(cm.exception), "Wrong name or passcode.")
+
+    def test_no_users_configured(self):
+        with self.assertRaises(PermissionError):
+            check_login("ana", "alpha-pass", {})
 
 
 class Identity(unittest.TestCase):

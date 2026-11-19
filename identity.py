@@ -1,4 +1,24 @@
-"""Who is using the app. Pure function so it can be tested without Streamlit."""
+"""Who is using the app. Pure functions so they can be tested without Streamlit."""
+import hmac
+
+
+def check_login(username, passcode, users):
+    """Returns the lowercase username if the name and passcode match an entry in `users`.
+
+    `users` maps each name to its passcode (the [users] table in Secrets). Raises PermissionError
+    with the same message for a wrong name and a wrong passcode, so the app doesn't reveal which
+    names exist.
+    """
+    name = str(username or "").strip().lower()
+    entries = {str(k).strip().lower(): str(v) for k, v in dict(users or {}).items()}
+    if not entries:
+        raise PermissionError("No users are set up. Add them under [users] in Secrets.")
+    expected = entries.get(name)
+    # Compare even when the name is unknown, so timing doesn't reveal valid names.
+    ok = hmac.compare_digest(str(passcode or ""), expected or "\x00none")
+    if not name or expected is None or not ok:
+        raise PermissionError("Wrong name or passcode.")
+    return name
 
 
 def resolve_user(email, hosted, allowed=(), dev_user="local@localhost"):

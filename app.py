@@ -39,7 +39,7 @@ from progress import (
     weekly_sets_by_muscle,
     weekly_sets_history,
 )
-from identity import resolve_user
+from identity import check_login, resolve_user
 from store import LocalStore, open_sheets_store, uses_sheets
 
 LOCAL_FILE = Path(os.environ.get("GYM_DATA_FILE", Path(__file__).parent / "data" / "db.json"))
@@ -76,14 +76,38 @@ def dev_user():
     return os.environ.get("GYM_DEV_USER", "local@localhost")
 
 
-def current_user():
-    """The signed-in user's email. Hosted: Streamlit login, optionally checked against ALLOWED_EMAILS."""
+def _users_table():
     try:
-        email = st.user.email
+        return dict(_secrets()["users"])
     except Exception:
-        email = None
-    allowed = [e for e in _secret("ALLOWED_EMAILS").split(",") if e.strip()]
-    return resolve_user(email, hosted=is_hosted(), allowed=allowed, dev_user=dev_user())
+        return {}
+
+
+def current_user():
+    """The signed-in user's name. Hosted: name and passcode from [users] in Secrets, kept for the session."""
+    if not is_hosted():
+        try:
+            email = st.user.email
+        except Exception:
+            email = None
+        return resolve_user(email, hosted=False, dev_user=dev_user())
+
+    if st.session_state.get("user"):
+        return st.session_state["user"]
+    st.title("🏋️ Gym")
+    st.subheader("Sign in")
+    with st.form("login"):
+        name = st.text_input("Name")
+        passcode = st.text_input("Passcode", type="password")
+        submitted = st.form_submit_button("Sign in")
+    if submitted:
+        try:
+            st.session_state["user"] = check_login(name, passcode, _users_table())
+        except PermissionError as e:
+            st.error(str(e))
+        else:
+            st.rerun()
+    st.stop()
 
 
 def get_store(user):
@@ -610,20 +634,16 @@ def page_progress(store, program):
 
 # ---------- app ----------
 
-try:
-    user = current_user()
-except PermissionError as e:
-    st.title("🏋️ Gym")
-    st.error(str(e))
-    st.write("DEBUG (temporary): st.user email =", repr(getattr(st.user, "email", None)))
-    st.write("DEBUG (temporary): st.user keys =", sorted(dict(st.user).keys()) if hasattr(st.user, "keys") else repr(st.user))
-    st.stop()
+user = current_user()
 
 store = get_store(user)
 program = store.get_program()
 
 st.title("🏋️ Gym")
 st.sidebar.caption(f"Signed in as {user}")
+if is_hosted() and st.sidebar.button("Sign out"):
+    del st.session_state["user"]
+    st.rerun()
 st.sidebar.caption(f"Storage: {store.kind}")
 if store.kind == "local file":
     st.sidebar.caption("Local file storage is fine on your PC. A hosted app needs Google Sheets secrets (see README), or data can be lost on restart.")

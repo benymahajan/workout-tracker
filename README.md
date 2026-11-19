@@ -59,8 +59,8 @@ Create a **private** repository on GitHub under your personal account, then push
    `.streamlit/secrets.toml.example` as the template. Fill in `sheet_key`, `LEGACY_OWNER`, `ALLOWED_EMAILS`, and the
    fields from the downloaded JSON key under `[gcp_service_account]`.
 4. Click **Deploy**.
-5. In the app's menu, open **Settings > Sharing** and choose **Only specific people can view**.
-   Add your own email. This is the main lock: without it the URL is public.
+5. In the app's menu, open **Settings > Sharing** and choose **Anyone with the link**. People then
+   reach the app directly, and the name and passcode in Secrets are the lock.
 
 Bookmark the URL on your phone, or use the browser's "Add to Home Screen."
 
@@ -71,7 +71,7 @@ Open the **Program** tab, Settings, and set **Timezone** (for example `America/T
 
 ## Multi-user: inviting friends
 
-Everyone signs in with their own email, and each person sees only their own workouts, food,
+Each person signs in with a name and passcode, and sees only their own workouts, food,
 bodyweight, and program.
 
 **Before you invite anyone:**
@@ -79,25 +79,30 @@ bodyweight, and program.
   see everyone's data. Tell friends this before they join. If someone doesn't want that, they
   should run their own copy instead.
 - The app's code is public. The data isn't in the repo, but anyone can read the code and see how it works.
+- The app URL is open to anyone who has it. Only someone with a name and passcode gets in.
 
 **To add a friend:**
-1. In the app's **Settings → Sharing**, add their email under "Only specific people can view."
-2. In Streamlit's **Secrets**, add their email to `ALLOWED_EMAILS` (comma-separated, lowercase).
-3. Send them the app URL. They sign in with that email. Nothing else to install.
+1. In Streamlit's **Secrets**, add a line under `[users]`: `name = "passcode"`. Use a long passcode
+   and a different one per person.
+2. Send them the app URL, their name, and their passcode over a private channel. They sign in with
+   the name and passcode. Nothing else to install.
+3. To remove someone, delete their line under `[users]` and reboot the app.
 
-**Secrets to set for multi-user** (replace the old `APP_PASSWORD`):
+**Secrets to set for multi-user** (replace the old `APP_PASSWORD`, `ALLOWED_EMAILS`):
 
 ```toml
-LEGACY_OWNER = "you@example.com"        # owns rows saved before accounts existed
-ALLOWED_EMAILS = "you@example.com,friend@example.com"
+LEGACY_OWNER = "you"                    # owns rows saved before accounts existed
+[users]
+you = "your-long-passcode"
+friend = "their-long-passcode"
 ```
 
-`LEGACY_OWNER` gives your existing data to you. Without it, that data is hidden from everyone.
-You can remove `APP_PASSWORD`. Sign-in replaces it.
+`LEGACY_OWNER` must match one of the names under `[users]`. It gives your existing data to you.
+Without it, that data is hidden from everyone.
 
-**What changed in the Sheet:** each tab has a new `owner` column at the end. The `program` tab
-now has one row per user. The app creates or updates these columns automatically on the next run.
-
+**What changed in the Sheet:** each tab has an `owner` column at the end holding the person's name.
+Rows saved before this change belong to `LEGACY_OWNER`. The `program` tab now has one row per user.
+The app creates or updates these columns automatically on the next run.
 ## Using it
 
 - **Workout:** Tap the workout you're doing (the next one in the rotation is highlighted). Each
