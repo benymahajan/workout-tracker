@@ -56,7 +56,7 @@ Create a **private** repository on GitHub under your personal account, then push
 1. Go to share.streamlit.io and sign in with GitHub.
 2. **Create app > Deploy from GitHub**. Pick the repo, branch `main`, and main file `app.py`.
 3. Open **Advanced settings**, choose Python 3.12 or newer, then paste into **Secrets**. Use
-   `.streamlit/secrets.toml.example` as the template. Fill in `sheet_key`, `APP_PASSWORD`, and the
+   `.streamlit/secrets.toml.example` as the template. Fill in `sheet_key`, `LEGACY_OWNER`, `ALLOWED_EMAILS`, and the
    fields from the downloaded JSON key under `[gcp_service_account]`.
 4. Click **Deploy**.
 5. In the app's menu, open **Settings > Sharing** and choose **Only specific people can view**.
