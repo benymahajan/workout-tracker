@@ -615,6 +615,8 @@ try:
 except PermissionError as e:
     st.title("🏋️ Gym")
     st.error(str(e))
+    st.write("DEBUG (temporary): st.user email =", repr(getattr(st.user, "email", None)))
+    st.write("DEBUG (temporary): st.user keys =", sorted(dict(st.user).keys()) if hasattr(st.user, "keys") else repr(st.user))
     st.stop()
 
 store = get_store(user)
