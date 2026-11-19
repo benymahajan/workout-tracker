@@ -276,6 +276,19 @@ def uses_sheets(secrets):
         return False
 
 
+def normalize_service_account(info):
+    """Repairs the private key after it's pasted into Streamlit secrets.
+
+    Pastes often turn the key's line breaks into a literal backslash-n, or add stray quotes.
+    The key needs real newlines and a trailing newline to parse as PEM.
+    """
+    info = dict(info)
+    key = str(info.get("private_key", "")).strip().strip('"').strip()
+    key = key.replace("\\n", "\n").replace("\r\n", "\n")
+    info["private_key"] = key.rstrip("\n") + "\n"
+    return info
+
+
 def open_sheets_store(secrets):
     import gspread
     from google.oauth2.service_account import Credentials
@@ -284,6 +297,7 @@ def open_sheets_store(secrets):
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds = Credentials.from_service_account_info(dict(secrets["gcp_service_account"]), scopes=scopes)
+    info = normalize_service_account(secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(info, scopes=scopes)
     client = gspread.authorize(creds)
     return SheetsStore(client.open_by_key(secrets["sheet_key"]))
