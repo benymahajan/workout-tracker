@@ -18,10 +18,13 @@ class GymAppFlow(unittest.TestCase):
         self.dir = tempfile.TemporaryDirectory()
         self.data = Path(self.dir.name) / "db.json"
         os.environ["GYM_DATA_FILE"] = str(self.data)
-        self.store = LocalStore(self.data)
+        os.environ["GYM_DEV_USER"] = "dev@test.local"
+        # AppTest reports st.user.email as "test@example.com", so the app acts as that user.
+        self.store = LocalStore(self.data, legacy_owner="dev@test.local").with_owner("test@example.com")
 
     def tearDown(self):
         os.environ.pop("GYM_DATA_FILE", None)
+        os.environ.pop("GYM_DEV_USER", None)
         self.dir.cleanup()
 
     def run_app(self):

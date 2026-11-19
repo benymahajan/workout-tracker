@@ -69,6 +69,35 @@ Bookmark the URL on your phone, or use the browser's "Add to Home Screen."
 Open the **Program** tab, Settings, and set **Timezone** (for example `America/Toronto`). Otherwise
 "today" follows UTC, and evening sessions can land on the next day. Save settings.
 
+## Multi-user: inviting friends
+
+Everyone signs in with their own email, and each person sees only their own workouts, food,
+bodyweight, and program.
+
+**Before you invite anyone:**
+- **You can read every row.** You own the Google Sheet and the app, so you can open the Sheet and
+  see everyone's data. Tell friends this before they join. If someone doesn't want that, they
+  should run their own copy instead.
+- The app's code is public. The data isn't in the repo, but anyone can read the code and see how it works.
+
+**To add a friend:**
+1. In the app's **Settings → Sharing**, add their email under "Only specific people can view."
+2. In Streamlit's **Secrets**, add their email to `ALLOWED_EMAILS` (comma-separated, lowercase).
+3. Send them the app URL. They sign in with that email. Nothing else to install.
+
+**Secrets to set for multi-user** (replace the old `APP_PASSWORD`):
+
+```toml
+LEGACY_OWNER = "you@example.com"        # owns rows saved before accounts existed
+ALLOWED_EMAILS = "you@example.com,friend@example.com"
+```
+
+`LEGACY_OWNER` gives your existing data to you. Without it, that data is hidden from everyone.
+You can remove `APP_PASSWORD`. Sign-in replaces it.
+
+**What changed in the Sheet:** each tab has a new `owner` column at the end. The `program` tab
+now has one row per user. The app creates or updates these columns automatically on the next run.
+
 ## Using it
 
 - **Workout:** Tap the workout you're doing (the next one in the rotation is highlighted). Each

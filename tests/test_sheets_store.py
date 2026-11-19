@@ -27,6 +27,10 @@ class FakeWS:
     def __init__(self, title):
         self.title = title
         self.grid = []  # list of rows, each a list of raw values
+        self.col_count = 26
+
+    def add_cols(self, n):
+        self.col_count += n
 
     def get_all_values(self):
         return [["" if v is None else str(v) for v in row] for row in self.grid]
@@ -120,6 +124,69 @@ class SheetsStoreTests(unittest.TestCase):
         self.store.delete_session(a["id"])
         b = self.store.add_session("2026-11-19", "B")
         self.assertGreater(b["id"], a["id"])
+
+
+ANA, BEN = "ana@example.com", "ben@example.com"
+
+
+class SheetsOwners(unittest.TestCase):
+    def test_rows_are_private_per_owner(self):
+        sheet = FakeSpreadsheet()
+        base = SheetsStore(sheet)
+        ana, ben = base.with_owner(ANA), base.with_owner(BEN)
+        s = ana.add_session("2026-11-18", "A")
+        ana.add_set(s["id"], "Back Squat", 60, 10)
+        ana.add_food("2026-11-18", "Oats", 400, 15, 60)
+
+        self.assertEqual(ben.list_sessions(), [])
+        self.assertEqual(ben.list_sets(), [])
+        self.assertEqual(ben.list_food(), [])
+        self.assertIsNone(ben.finish_session(s["id"]))
+        self.assertFalse(ben.delete_session(s["id"]))
+        self.assertEqual(ana.active_session()["id"], s["id"])
+        self.assertEqual(ana.list_sessions()[0]["owner"], ANA)
+
+    def test_programs_are_per_owner(self):
+        base = SheetsStore(FakeSpreadsheet())
+        ana, ben = base.with_owner(ANA), base.with_owner(BEN)
+        p = ana.get_program()
+        p["units"] = "lb"
+        ana.save_program(p)
+        self.assertEqual(ana.get_program()["units"], "lb")
+        self.assertEqual(ben.get_program()["units"], "kg")
+        ana.save_program({**ana.get_program(), "units": "kg"})
+        self.assertEqual(ana.get_program()["units"], "kg")
+        self.assertEqual(len(ana._tabs["program"].get_all_values()), 2)  # header + one row
+
+    def test_legacy_rows_and_program_belong_to_legacy_owner(self):
+        sheet = FakeSpreadsheet()
+        old = SheetsStore(sheet)
+        old.insert("sessions", {"date": "2026-11-18", "workout": "A", "status": "done",
+                                "started_at": "", "finished_at": ""})  # owner "" (pre-accounts)
+        old_json = '{"units": "lb", "workouts": {}, "timezone": "UTC", "workoutsPerWeek": 3, ' \
+                   '"progression": {"repMin": 8, "repMax": 12, "increment": 2.5}, ' \
+                   '"nutrition": {"dailyCalorieTarget": 2000, "dailyProteinTargetG": 120}, "schedule": ""}'
+        # Simulate the old program layout: JSON in A1 with no header.
+        sheet.tabs = [ws for ws in sheet.tabs if ws.title != "program"]
+        ws = sheet.add_worksheet(title="program")
+        ws.grid = [[old_json]]
+
+        store = SheetsStore(sheet, legacy_owner=ANA)
+        self.assertEqual(len(store.with_owner(ANA).list_sessions()), 1)
+        self.assertEqual(store.with_owner(BEN).list_sessions(), [])
+        self.assertEqual(store.with_owner(ANA).get_program()["units"], "lb")
+        self.assertEqual(store.with_owner(BEN).get_program()["units"], "kg")
+        self.assertEqual(ws.get_all_values()[0][:2], ["id", "json"])
+
+    def test_older_header_is_extended_with_owner_column(self):
+        sheet = FakeSpreadsheet()
+        ws = sheet.add_worksheet(title="sessions")
+        ws.col_count = 6
+        ws.grid = [["id", "date", "workout", "status", "started_at", "finished_at"],
+                   ["5", "2026-11-10", "A", "done", "", ""]]
+        store = SheetsStore(sheet, legacy_owner=ANA)
+        self.assertEqual(ws.get_all_values()[0][-1], "owner")
+        self.assertEqual(store.with_owner(ANA).list_sessions()[0]["id"], 5)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@
 Run locally:  streamlit run app.py
 Hosted:       Streamlit Community Cloud, with secrets pointing at a Google Sheet (see README).
 """
-import hmac
 import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -40,6 +39,7 @@ from progress import (
     weekly_sets_by_muscle,
     weekly_sets_history,
 )
+from identity import resolve_user
 from store import LocalStore, open_sheets_store, uses_sheets
 
 LOCAL_FILE = Path(os.environ.get("GYM_DATA_FILE", Path(__file__).parent / "data" / "db.json"))
@@ -68,22 +68,28 @@ def _sheets_store():
     return open_sheets_store(_secrets())
 
 
-def get_store():
-    return _sheets_store() if uses_sheets(_secrets()) else LocalStore(LOCAL_FILE)
+def is_hosted():
+    return uses_sheets(_secrets())
 
 
-def require_password():
-    """Optional extra lock: set APP_PASSWORD in secrets. Streamlit sharing settings are the main gate."""
-    pw = _secret("APP_PASSWORD")
-    if not pw or st.session_state.get("authed"):
-        return
-    entered = st.text_input("Password", type="password", key="pw_input")
-    if entered:
-        if hmac.compare_digest(entered, pw):
-            st.session_state["authed"] = True
-            st.rerun()
-        st.error("Wrong password.")
-    st.stop()
+def dev_user():
+    return os.environ.get("GYM_DEV_USER", "local@localhost")
+
+
+def current_user():
+    """The signed-in user's email. Hosted: Streamlit login, optionally checked against ALLOWED_EMAILS."""
+    try:
+        email = st.user.email
+    except Exception:
+        email = None
+    allowed = [e for e in _secret("ALLOWED_EMAILS").split(",") if e.strip()]
+    return resolve_user(email, hosted=is_hosted(), allowed=allowed, dev_user=dev_user())
+
+
+def get_store(user):
+    """Every row this store touches belongs to `user`."""
+    base = _sheets_store() if is_hosted() else LocalStore(LOCAL_FILE, legacy_owner=dev_user())
+    return base.with_owner(user)
 
 
 # ---------- small helpers ----------
@@ -604,11 +610,18 @@ def page_progress(store, program):
 
 # ---------- app ----------
 
-require_password()
-store = get_store()
+try:
+    user = current_user()
+except PermissionError as e:
+    st.title("🏋️ Gym")
+    st.error(str(e))
+    st.stop()
+
+store = get_store(user)
 program = store.get_program()
 
 st.title("🏋️ Gym")
+st.sidebar.caption(f"Signed in as {user}")
 st.sidebar.caption(f"Storage: {store.kind}")
 if store.kind == "local file":
     st.sidebar.caption("Local file storage is fine on your PC. A hosted app needs Google Sheets secrets (see README), or data can be lost on restart.")
